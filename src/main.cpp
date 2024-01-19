@@ -9,10 +9,16 @@ int main()
     cam.start();
     int cnt = 500;
     vector<Vec3f> circles;
+    EMIRO::Keyboard kb;
     while (cnt)
     {
         cnt--;
         cam.getobject(circles);
+        if (kb.get_key() == 27)
+        {
+            std::cout << "Stopped by interrupt\n";
+            break;
+        }
         usleep(100000);
     }
     cam.stop();

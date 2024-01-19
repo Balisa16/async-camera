@@ -13,8 +13,10 @@
 #include <unistd.h>
 #endif
 
-using cv::Point, cv::Mat, cv::VideoCapture, cv::waitKey, cv::Vec3f, cv::Scalar_;
+#pragma region Namespace
+using cv::Point, cv::Mat, cv::VideoCapture, cv::waitKey, cv::Vec3f, cv::Scalar_, cv::Scalar;
 using std::cout, std::atomic_flag, std::string, std::thread, std::cerr, std::snprintf, std::vector;
+#pragma endregion
 
 typedef std::chrono::_V2::system_clock::time_point tpoint;
 
@@ -38,8 +40,8 @@ namespace EMIRO
         tpoint current_time;
         cout << std::fixed << std::setprecision(3);
         cout << "Color Range: [" << high.val[0] << '-' << low.val[0] << ", " << low.val[1] << '-' << high.val[1] << ", " << low.val[2] << '-' << high.val[2] << "]\n";
-        cv::Scalar local_low = cv::Scalar(low.val[0], low.val[1], low.val[2]);
-        cv::Scalar local_high = cv::Scalar(high.val[0], high.val[1], high.val[2]);
+        Scalar local_low = Scalar(low.val[0], low.val[1], low.val[2]);
+        Scalar local_high = Scalar(high.val[0], high.val[1], high.val[2]);
         while (running)
         {
             cap >> origin;
@@ -66,6 +68,7 @@ namespace EMIRO
             waitKey(1);
         }
     }
+
     class AsyncCam
     {
     private:
@@ -220,13 +223,30 @@ namespace EMIRO
         cv::createTrackbar("Low V", "Calibration", &low[2], 100, nullptr);
 
         Mat local_frame;
-
+        cv::Mat dilate_element = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(15, 15));
         while (true)
         {
             cap >> local_frame;
-            cout << '[' << high.val[0] << "," << high.val[1] << "," << high.val[2] << "] [" << low.val[0] << "," << low.val[1] << "," << low.val[2] << "]      \r";
+            cout << '[' << high.val[0] << "," << high.val[1] << "," << high.val[2] << "] [" << low.val[0] << "," << low.val[1] << "," << low.val[2] << "] => Detected : ";
+
+            // Process output
+            cv::cvtColor(local_frame, frame, cv::COLOR_BGR2HSV);
+            cv::inRange(frame,
+                        cv::Scalar(low.val[0], low.val[1], low.val[2]),
+                        cv::Scalar(high.val[0], high.val[1], high.val[2]), frame);
+            cv::dilate(frame, frame, dilate_element);
+            cv::GaussianBlur(frame, frame, cv::Size(31, 31), 0, 0);
+
+            // Get circles
+            circles.clear();
+            cv::HoughCircles(frame, circles, cv::HOUGH_GRADIENT, 1, 30, 200, 50, 0, 0);
+
+            std::cout << circles.size() << "       \r";
             cout.flush();
+
+            // Show output
             cv::imshow("Calibration", local_frame);
+            cv::imshow("Result", frame);
             if (cv::waitKey(1) == 'q')
                 break;
         }
@@ -234,7 +254,7 @@ namespace EMIRO
         cap.release();
         cv::destroyAllWindows();
         sleep(2);
-        cout << "Calibration done          \n";
+        cout << "Calibration done                     \n";
     }
 
     inline void AsyncCam::start()

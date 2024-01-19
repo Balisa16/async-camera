@@ -244,6 +244,16 @@ namespace EMIRO
             std::cout << circles.size() << "       \r";
             cout.flush();
 
+            for (auto &c : circles)
+            {
+                cv::Point center(cvRound(c[0]), cvRound(c[1]));
+                int radius = cvRound(c[2]);
+                // circle center
+                cv::circle(local_frame, center, 3, cv::Scalar(0, 255, 0), -1, 8, 0);
+                // circle outline
+                cv::circle(local_frame, center, radius, cv::Scalar(0, 0, 255), 3, 8, 0);
+            }
+
             // Show output
             cv::imshow("Calibration", local_frame);
             cv::imshow("Result", frame);

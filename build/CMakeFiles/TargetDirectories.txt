@@ -1,0 +1,3 @@
+/home/all/async-vision/build/CMakeFiles/async-camera.dir
+/home/all/async-vision/build/CMakeFiles/edit_cache.dir
+/home/all/async-vision/build/CMakeFiles/rebuild_cache.dir

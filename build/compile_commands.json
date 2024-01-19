@@ -1,0 +1,8 @@
+[
+{
+  "directory": "/home/all/async-vision/build",
+  "command": "/usr/lib/ccache/g++  -I/home/all/async-vision/include -isystem /usr/include/opencv4 -g -std=gnu++17 -o CMakeFiles/async-camera.dir/src/main.cpp.o -c /home/all/async-vision/src/main.cpp",
+  "file": "/home/all/async-vision/src/main.cpp",
+  "output": "CMakeFiles/async-camera.dir/src/main.cpp.o"
+}
+]

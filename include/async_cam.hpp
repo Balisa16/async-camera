@@ -7,7 +7,11 @@
 #include <thread>
 #include <string>
 #include <vector>
+#ifdef _WIN32
+#include <windows.h>
+#elif __linux__
 #include <unistd.h>
+#endif
 
 using cv::Point, cv::Mat, cv::VideoCapture, cv::waitKey, cv::Vec3f, cv::Scalar_;
 using std::cout, std::atomic_flag, std::string, std::thread, std::cerr, std::snprintf, std::vector;
@@ -33,12 +37,14 @@ namespace EMIRO
         tpoint start_time = std::chrono::high_resolution_clock::now();
         tpoint current_time;
         cout << std::fixed << std::setprecision(3);
+        cout << "Color Range: [" << high.val[0] << '-' << low.val[0] << ", " << low.val[1] << '-' << high.val[1] << ", " << low.val[2] << '-' << high.val[2] << "]\n";
+        cv::Scalar local_low = cv::Scalar(low.val[0], low.val[1], low.val[2]);
+        cv::Scalar local_high = cv::Scalar(high.val[0], high.val[1], high.val[2]);
         while (running)
         {
-            // std::cout << "thread run\n";
             cap >> origin;
             cv::cvtColor(origin, frame, cv::COLOR_BGR2HSV);
-            cv::inRange(frame, low, high, frame);
+            cv::inRange(frame, local_low, local_high, frame);
             cv::dilate(frame, frame, dilate_element);
             cv::GaussianBlur(frame, frame, cv::Size(31, 31), 0, 0);
             while (lock_flag.test_and_set(std::memory_order_acquire))
@@ -71,7 +77,7 @@ namespace EMIRO
         thread th;
         atomic_flag frames_lock;
         string camera_str;
-        int camera_idx = -1;
+        int camera_idx = -1, width = 0, height = 0;
         bool running = false;
         bool thread_en = true;
 
@@ -115,7 +121,7 @@ namespace EMIRO
         ~AsyncCam();
     };
 
-    AsyncCam::AsyncCam(string path, int width, int height) : frames_lock(ATOMIC_FLAG_INIT)
+    AsyncCam::AsyncCam(string path, int width, int height) : frames_lock(ATOMIC_FLAG_INIT), width(width), height(height)
     {
         cap = VideoCapture(path);
         cap.set(cv::CAP_PROP_FRAME_WIDTH, width);
@@ -132,7 +138,7 @@ namespace EMIRO
         camera_idx = -1;
     }
 
-    AsyncCam::AsyncCam(int device_id, int width, int height) : frames_lock(ATOMIC_FLAG_INIT)
+    AsyncCam::AsyncCam(int device_id, int width, int height) : frames_lock(ATOMIC_FLAG_INIT), width(width), height(height)
     {
 #ifdef _WIN32
         cap = VideoCapture(device_id);
@@ -206,9 +212,9 @@ namespace EMIRO
 
         cv::namedWindow("Calibration", cv::WINDOW_NORMAL);
         cv::namedWindow("Result", cv::WINDOW_NORMAL);
-        cv::createTrackbar("High H", "Calibration", &high[0], 100, nullptr);
-        cv::createTrackbar("High S", "Calibration", &high[1], 100, nullptr);
-        cv::createTrackbar("High V", "Calibration", &high[2], 100, nullptr);
+        cv::createTrackbar("High H", "Calibration", &high[0], 255, nullptr);
+        cv::createTrackbar("High S", "Calibration", &high[1], 255, nullptr);
+        cv::createTrackbar("High V", "Calibration", &high[2], 255, nullptr);
         cv::createTrackbar("Low H", "Calibration", &low[0], 100, nullptr);
         cv::createTrackbar("Low S", "Calibration", &low[1], 100, nullptr);
         cv::createTrackbar("Low V", "Calibration", &low[2], 100, nullptr);
@@ -227,7 +233,8 @@ namespace EMIRO
 
         cap.release();
         cv::destroyAllWindows();
-        cout << "Calibration done\n";
+        sleep(2);
+        cout << "Calibration done          \n";
     }
 
     inline void AsyncCam::start()
@@ -237,6 +244,22 @@ namespace EMIRO
             std::cout << "Camera is already running\n";
             return;
         }
+        if (camera_idx > -1)
+            cap.open(camera_idx);
+        else
+            cap.open(camera_str);
+        // Set camera resolution
+        cap.set(cv::CAP_PROP_FRAME_WIDTH, width);
+        cap.set(cv::CAP_PROP_FRAME_HEIGHT, height);
+
+        if (!cap.isOpened())
+        {
+            cerr << "Failed openning camera\n";
+            exit(EXIT_FAILURE);
+        }
+        running = true;
+
+        cout << "Detection started\n";
         th = thread(refresh_frame, std::ref(cap), std::ref(low), std::ref(high), std::ref(circles),
                     std::ref(frames_lock), std::ref(thread_en));
         th.detach();

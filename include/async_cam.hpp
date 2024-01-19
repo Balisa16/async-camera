@@ -9,7 +9,7 @@
 #include <vector>
 #include <unistd.h>
 
-using cv::Point, cv::Mat, cv::VideoCapture, cv::waitKey, cv::Vec3f, cv::Scalar;
+using cv::Point, cv::Mat, cv::VideoCapture, cv::waitKey, cv::Vec3f, cv::Scalar_;
 using std::cout, std::atomic_flag, std::string, std::thread, std::cerr, std::snprintf, std::vector;
 
 typedef std::chrono::_V2::system_clock::time_point tpoint;
@@ -24,10 +24,10 @@ namespace EMIRO
 #define OS_NAME "Other"
 #endif
 
-    static void refresh_frame(VideoCapture &cap, Scalar &low, Scalar &high, vector<Vec3f> &out_circles,
+    static void refresh_frame(VideoCapture &cap, Scalar_<int> &low, Scalar_<int> &high, vector<Vec3f> &out_circles,
                               atomic_flag &lock_flag, bool &running)
     {
-        Mat frame;
+        Mat origin, frame;
         int frame_cnt = 0;
         cv::Mat dilate_element = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(15, 15));
         tpoint start_time = std::chrono::high_resolution_clock::now();
@@ -36,8 +36,8 @@ namespace EMIRO
         while (running)
         {
             // std::cout << "thread run\n";
-            cap >> frame;
-            cv::cvtColor(frame, frame, cv::COLOR_BGR2HSV);
+            cap >> origin;
+            cv::cvtColor(origin, frame, cv::COLOR_BGR2HSV);
             cv::inRange(frame, low, high, frame);
             cv::dilate(frame, frame, dilate_element);
             cv::GaussianBlur(frame, frame, cv::Size(31, 31), 0, 0);
@@ -56,7 +56,7 @@ namespace EMIRO
                 cout.flush();
                 frame_cnt = 0;
             }
-            cv::imshow("Frame", frame);
+            cv::imshow("Frame", origin);
             waitKey(1);
         }
     }
@@ -65,17 +65,50 @@ namespace EMIRO
     private:
         VideoCapture cap;
         Mat frame;
-        bool running = false;
-        Scalar high = Scalar(255, 255, 255);
-        Scalar low = Scalar(0, 0, 0);
+        Scalar_<int> high = Scalar_<int>(255, 255, 255);
+        Scalar_<int> low = Scalar_<int>(0, 0, 0);
         vector<Vec3f> circles;
         thread th;
         atomic_flag frames_lock;
+        string camera_str;
+        int camera_idx = -1;
+        bool running = false;
         bool thread_en = true;
+
+        void highH_handler(int value, void *userdata)
+        {
+            high.val[0] = value;
+        }
+
+        void lowH_handler(int value, void *userdata)
+        {
+            low.val[0] = value;
+        }
+
+        void highS_handler(int value, void *userdata)
+        {
+            high.val[1] = value;
+        }
+
+        void lowS_handler(int value, void *userdata)
+        {
+            low.val[1] = value;
+        }
+
+        void highV_handler(int value, void *userdata)
+        {
+            high.val[2] = value;
+        }
+
+        void lowV_handler(int value, void *userdata)
+        {
+            low.val[2] = value;
+        }
 
     public:
         AsyncCam(string path = "/dev/video0", int width = 640, int height = 480);
         AsyncCam(int device_id = 0, int width = 640, int height = 480);
+        void calibrate();
         void start();
         void getobject(vector<Vec3f> &out_circles);
         void stop();
@@ -89,12 +122,20 @@ namespace EMIRO
         cap.set(cv::CAP_PROP_FRAME_HEIGHT, height);
         // set fps
         cap.set(cv::CAP_PROP_FPS, 30);
+        if (!cap.isOpened())
+        {
+            cerr << "Failed openning camera\n";
+            exit(EXIT_FAILURE);
+        }
+
+        camera_str = path;
+        camera_idx = -1;
     }
 
     AsyncCam::AsyncCam(int device_id, int width, int height) : frames_lock(ATOMIC_FLAG_INIT)
     {
 #ifdef _WIN32
-        cap = VideoCapture(0);
+        cap = VideoCapture(device_id);
 #elif __linux__
         cap = VideoCapture(device_id);
         if (!cap.isOpened())
@@ -137,30 +178,83 @@ namespace EMIRO
             exit(EXIT_FAILURE);
         }
 
-        th = thread(refresh_frame, std::ref(cap), std::ref(low), std::ref(high), std::ref(circles),
-                    std::ref(frames_lock), std::ref(thread_en));
+        camera_idx = device_id;
+        camera_str = "";
     }
 
-    void AsyncCam::start()
+    inline void AsyncCam::calibrate()
+    {
+        // Check if camera is running
+        if (running)
+        {
+            std::cout << "Camera is already running. Please stop it first\n";
+            return;
+        }
+
+        // select camera
+        if (camera_idx > -1)
+            cap.open(camera_idx);
+        else
+            cap.open(camera_str);
+
+        // Fail handling
+        if (!cap.isOpened())
+        {
+            cerr << "Failed openning camera\n";
+            exit(EXIT_FAILURE);
+        }
+
+        cv::namedWindow("Calibration", cv::WINDOW_NORMAL);
+        cv::namedWindow("Result", cv::WINDOW_NORMAL);
+        cv::createTrackbar("High H", "Calibration", &high[0], 100, nullptr);
+        cv::createTrackbar("High S", "Calibration", &high[1], 100, nullptr);
+        cv::createTrackbar("High V", "Calibration", &high[2], 100, nullptr);
+        cv::createTrackbar("Low H", "Calibration", &low[0], 100, nullptr);
+        cv::createTrackbar("Low S", "Calibration", &low[1], 100, nullptr);
+        cv::createTrackbar("Low V", "Calibration", &low[2], 100, nullptr);
+
+        Mat local_frame;
+
+        while (true)
+        {
+            cap >> local_frame;
+            cout << '[' << high.val[0] << "," << high.val[1] << "," << high.val[2] << "] [" << low.val[0] << "," << low.val[1] << "," << low.val[2] << "]      \r";
+            cout.flush();
+            cv::imshow("Calibration", local_frame);
+            if (cv::waitKey(1) == 'q')
+                break;
+        }
+
+        cap.release();
+        cv::destroyAllWindows();
+        cout << "Calibration done\n";
+    }
+
+    inline void AsyncCam::start()
     {
         if (running)
         {
             std::cout << "Camera is already running\n";
             return;
         }
+        th = thread(refresh_frame, std::ref(cap), std::ref(low), std::ref(high), std::ref(circles),
+                    std::ref(frames_lock), std::ref(thread_en));
         th.detach();
     }
-    void AsyncCam::getobject(vector<Vec3f> &out_circles)
+    inline void AsyncCam::getobject(vector<Vec3f> &out_circles)
     {
         while (frames_lock.test_and_set(std::memory_order_acquire))
             ;
         out_circles = circles;
         frames_lock.clear();
     }
-    void AsyncCam::stop()
+    inline void AsyncCam::stop()
     {
         thread_en = false;
         sleep(1);
+        cap.release();
+        cv::destroyAllWindows();
+        cout << "Thread stopped. Camera closed\n";
     }
 
     AsyncCam::~AsyncCam()
@@ -170,6 +264,7 @@ namespace EMIRO
         if (cap.isOpened())
         {
             cap.release();
+            cv::destroyAllWindows();
             cout << "Camera closed\n";
         }
     }

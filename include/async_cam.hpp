@@ -25,18 +25,20 @@ typedef std::chrono::_V2::system_clock::time_point tpoint;
 
 namespace EMIRO
 {
-#ifdef _WIN32
-#define OS_NAME "Windows"
-#elif __linux__
-#define OS_NAME "Linux"
-#else
-#define OS_NAME "Other"
-#endif
-
-    static void refresh_frame(VideoCapture &cap, Scalar_<int> &low, Scalar_<int> &high, vector<Vec3f> &out_circles,
+    /**
+     * @brief Thread for asynchronusly refreshing frames
+     *
+     * @param cap Video Capture
+     * @param low Scalar for low range
+     * @param high Scalar for high range
+     * @param out_circles Vector for detected circles
+     * @param lock_flag Atomic flag for thread
+     * @param running Boolean to control thread
+     */
+    static void refresh_frame(VideoCapture &cap, Mat &out_frame, Scalar_<int> &low, Scalar_<int> &high, vector<Vec3f> &out_circles,
                               atomic_flag &lock_flag, bool &running)
     {
-        Mat origin, frame;
+        Mat frame;
         int frame_cnt = 0;
         cv::Mat dilate_element = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(15, 15));
         tpoint start_time = std::chrono::high_resolution_clock::now();
@@ -47,8 +49,8 @@ namespace EMIRO
         Scalar local_high = Scalar(high.val[0], high.val[1], high.val[2]);
         while (running)
         {
-            cap >> origin;
-            cv::cvtColor(origin, frame, cv::COLOR_BGR2HSV);
+            cap >> frame;
+            cv::cvtColor(frame, frame, cv::COLOR_BGR2HSV);
             cv::inRange(frame, local_low, local_high, frame);
             cv::dilate(frame, frame, dilate_element);
             cv::GaussianBlur(frame, frame, cv::Size(31, 31), 0, 0);
@@ -56,6 +58,7 @@ namespace EMIRO
                 ;
             out_circles.clear();
             cv::HoughCircles(frame, out_circles, cv::HOUGH_GRADIENT, 1, 30, 200, 50, 0, 0);
+            out_frame = frame;
             lock_flag.clear();
             frame_cnt++;
             current_time = std::chrono::high_resolution_clock::now();
@@ -67,11 +70,10 @@ namespace EMIRO
                 cout.flush();
                 frame_cnt = 0;
             }
-            cv::imshow("Frame", origin);
             waitKey(1);
         }
     }
-
+#pragma region Keyboard
 #ifndef KEYBOARD_INTERRUPT
 #define KEYBOARD_INTERRUPT
     struct Keyboard
@@ -114,8 +116,8 @@ namespace EMIRO
             fcntl(STDIN_FILENO, F_SETFL, oldf);
         }
     };
-
 #endif
+#pragma endregion
 
     class AsyncCam
     {
@@ -132,6 +134,7 @@ namespace EMIRO
         bool running = false;
         bool thread_en = true;
 
+    private:
         void highH_handler(int value, void *userdata)
         {
             high.val[0] = value;
@@ -162,16 +165,48 @@ namespace EMIRO
             low.val[2] = value;
         }
 
-        void keyboard_init()
-        {
-        }
-
     public:
+        /**
+         * @brief Construct a new Async Camera using string device path
+         *
+         * @param path Path of camera device
+         * @param width Width of camera frame
+         * @param height Height of camera frame
+         */
         AsyncCam(string path = "/dev/video0", int width = 640, int height = 480);
+
+        /**
+         * @brief Construct a new Async Camera using integer device id
+         *
+         * @param device_id Camera device id. 0 for default
+         * @param width Width of camera frame
+         * @param height Height of camera frame
+         */
         AsyncCam(int device_id = 0, int width = 640, int height = 480);
+
+        /**
+         * @brief Do calibration of low and high threshold values
+         *
+         */
         void calibrate();
+
+        /**
+         * @brief Start thread for object detection
+         *
+         */
         void start();
-        void getobject(vector<Vec3f> &out_circles);
+
+        /**
+         * @brief Get detected circles from thread
+         *
+         * @param out_circles Output vector of detected circles
+         */
+        void getobject(vector<Vec3f> &out_circles, Mat &out_frame);
+
+        /**
+         * @brief Stopping detection thread
+         *
+         */
         void stop();
         ~AsyncCam();
     };
@@ -342,15 +377,16 @@ namespace EMIRO
         running = true;
 
         cout << "Detection started\n";
-        th = thread(refresh_frame, std::ref(cap), std::ref(low), std::ref(high), std::ref(circles),
+        th = thread(refresh_frame, std::ref(cap), std::ref(frame), std::ref(low), std::ref(high), std::ref(circles),
                     std::ref(frames_lock), std::ref(thread_en));
         th.detach();
     }
-    inline void AsyncCam::getobject(vector<Vec3f> &out_circles)
+    inline void AsyncCam::getobject(vector<Vec3f> &out_circles, Mat &out_frame)
     {
         while (frames_lock.test_and_set(std::memory_order_acquire))
             ;
         out_circles = circles;
+        out_frame = frame;
         frames_lock.clear();
     }
     inline void AsyncCam::stop()

@@ -7,13 +7,41 @@ int main()
     AsyncCam cam(0, 640, 480);
     cam.calibrate();
     cam.start();
-    int cnt = 500;
     vector<Vec3f> circles;
+    Mat frame;
+    Vec3f selected_object;
     EMIRO::Keyboard kb;
-    while (cnt)
+    while (true)
     {
-        cnt--;
-        cam.getobject(circles);
+        cam.getobject(circles, frame);
+        if (!circles.empty())
+        {
+            selected_object = circles[0];
+
+            // Select largest object
+            if (circles.size() > 1)
+            {
+                int largest_radius = 0;
+                for (auto &c : circles)
+                {
+                    Point p(c[0], c[1]);
+                    int radius = cvRound(c[2]);
+
+                    if (radius > largest_radius)
+                    {
+                        largest_radius = radius;
+                        selected_object = c;
+                    }
+                }
+            }
+
+            cv::Point center(cvRound(selected_object[0]), cvRound(selected_object[1]));
+            int radius = cvRound(selected_object[2]);
+            // circle center
+            cv::circle(frame, center, 3, cv::Scalar(0, 255, 0), -1, 8, 0);
+            // circle outline
+            cv::circle(frame, center, radius, cv::Scalar(0, 0, 255), 3, 8, 0);
+        }
         if (kb.get_key() == 27)
         {
             std::cout << "Stopped by interrupt\n";

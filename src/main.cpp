@@ -46,15 +46,15 @@ int main()
         }
         cv::line(frame, cv::Point(cam.width / 2, 0), cv::Point(cam.width / 2, cam.height), cv::Scalar(255, 255, 0, 255), 2);
         cv::line(frame, cv::Point(0, cam.height / 2), cv::Point(cam.width, cam.height / 2), cv::Scalar(255, 255, 0, 255), 2);
-
-        cv::imshow("Result", frame);
+        if (frame.size().width > 0)
+            cv::imshow("Result", frame);
         cv::waitKey(1);
         if (kb.get_key() == 27)
         {
             std::cout << "Stopped by interrupt\n";
             break;
         }
-        // usleep(100000);
+        usleep(10000);
     }
     cam.stop();
     return 0;

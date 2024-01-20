@@ -1,12 +1,20 @@
 #ifndef ASYNCCAM
 #define ASYNCCAM
 
-#include <opencv4/opencv2/opencv.hpp>
+// OpenCV includes
+#include <opencv4/opencv2/videoio.hpp>
+#include <opencv4/opencv2/highgui.hpp>
+#include <opencv4/opencv2/imgproc.hpp>
+
+// Standard C++
 #include <iostream>
 #include <atomic>
 #include <thread>
 #include <string>
 #include <vector>
+#include <iomanip>
+
+// Platform specific
 #ifdef _WIN32
 #include <windows.h>
 #include <conio.h>
@@ -17,14 +25,16 @@
 #endif
 
 #pragma region Namespace
-using cv::Point, cv::Mat, cv::VideoCapture, cv::waitKey, cv::Vec3f, cv::Scalar_, cv::Scalar;
-using std::cout, std::atomic_flag, std::string, std::thread, std::cerr, std::snprintf, std::vector;
+using cv::Point, cv::Mat, cv::VideoCapture, cv::waitKey, cv::Vec3f, cv::Scalar_, cv::Scalar, cv::cvtColor, cv::inRange, cv::dilate, cv::GaussianBlur, cv::getStructuringElement, cv::destroyAllWindows, cv::namedWindow, cv::createTrackbar;
+using std::cout, std::atomic_flag, std::string, std::thread, std::cerr, std::snprintf, std::vector, std::setprecision, std::fixed;
 #pragma endregion
 
 typedef std::chrono::_V2::system_clock::time_point tpoint;
+typedef std::chrono::high_resolution_clock time_clock;
 
 namespace EMIRO
 {
+
     /**
      * @brief Thread for asynchronusly refreshing frames
      *
@@ -40,20 +50,20 @@ namespace EMIRO
     {
         Mat frame;
         int frame_cnt = 0;
-        cv::Mat dilate_element = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(15, 15));
-        tpoint start_time = std::chrono::high_resolution_clock::now();
+        Mat dilate_element = getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(15, 15));
+        tpoint start_time = time_clock::now();
         tpoint current_time;
-        cout << std::fixed << std::setprecision(3);
+        cout << fixed << setprecision(3);
         cout << "Color Range: [" << high.val[0] << '-' << low.val[0] << ", " << low.val[1] << '-' << high.val[1] << ", " << low.val[2] << '-' << high.val[2] << "]\n";
         Scalar local_low = Scalar(low.val[0], low.val[1], low.val[2]);
         Scalar local_high = Scalar(high.val[0], high.val[1], high.val[2]);
         while (running)
         {
             cap >> frame;
-            cv::cvtColor(frame, frame, cv::COLOR_BGR2HSV);
-            cv::inRange(frame, local_low, local_high, frame);
-            cv::dilate(frame, frame, dilate_element);
-            cv::GaussianBlur(frame, frame, cv::Size(31, 31), 0, 0);
+            cvtColor(frame, frame, cv::COLOR_BGR2HSV);
+            inRange(frame, local_low, local_high, frame);
+            dilate(frame, frame, dilate_element);
+            GaussianBlur(frame, frame, cv::Size(31, 31), 0, 0);
             while (lock_flag.test_and_set(std::memory_order_acquire))
                 ;
             out_circles.clear();
@@ -61,7 +71,7 @@ namespace EMIRO
             out_frame = frame;
             lock_flag.clear();
             frame_cnt++;
-            current_time = std::chrono::high_resolution_clock::now();
+            current_time = time_clock::now();
             int64_t elapsed = std::chrono::duration_cast<std::chrono::microseconds>(current_time - start_time).count();
             if (elapsed >= 1000000)
             {
@@ -104,16 +114,16 @@ namespace EMIRO
             return getchar();
 #elif _WIN32
             if (_kbhit())
-            {
                 return _getch()
-            }
 #endif
         }
 
         ~Keyboard()
         {
+#ifdef __linux__
             tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
             fcntl(STDIN_FILENO, F_SETFL, oldf);
+#endif
         }
     };
 #endif
@@ -208,6 +218,7 @@ namespace EMIRO
          *
          */
         void stop();
+
         ~AsyncCam();
     };
 
@@ -243,20 +254,23 @@ namespace EMIRO
             const char temp4[51] = " ! videoconvert ! video/x-raw,format=BGR ! appsink";
             char temp_char[256] = "";
             strcat(temp_char, temp1);
-            std::snprintf(buffer_int, sizeof(buffer_int), "%d", device_id);
+            snprintf(buffer_int, sizeof(buffer_int), "%d", device_id);
             strcat(temp_char, buffer_int);
             strcat(temp_char, temp2);
             snprintf(buffer_int, sizeof(buffer_int), "%d", width);
             strcat(temp_char, buffer_int);
             strcat(temp_char, temp3);
-            std::snprintf(buffer_int, sizeof(buffer_int), "%d", height);
+            snprintf(buffer_int, sizeof(buffer_int), "%d", height);
             strcat(temp_char, buffer_int);
             strcat(temp_char, temp4);
             cap = VideoCapture(temp_char);
             if (!cap.isOpened())
             {
-                cerr << "Failed openning camera. Available camera : \n";
+                cerr << "Failed openning camera.";
+#ifdef __linux__
+                cerr << " Available camera : \n";
                 system("ls /dev/video*");
+#endif
                 cout << '\n';
                 exit(EXIT_FAILURE);
             }
@@ -300,33 +314,34 @@ namespace EMIRO
             exit(EXIT_FAILURE);
         }
 
-        cv::namedWindow("Calibration", cv::WINDOW_NORMAL);
-        cv::namedWindow("Result", cv::WINDOW_NORMAL);
-        cv::createTrackbar("High H", "Calibration", &high[0], 255, nullptr);
-        cv::createTrackbar("High S", "Calibration", &high[1], 255, nullptr);
-        cv::createTrackbar("High V", "Calibration", &high[2], 255, nullptr);
-        cv::createTrackbar("Low H", "Calibration", &low[0], 100, nullptr);
-        cv::createTrackbar("Low S", "Calibration", &low[1], 100, nullptr);
-        cv::createTrackbar("Low V", "Calibration", &low[2], 100, nullptr);
+        // Prepare window
+        namedWindow("Calibration", cv::WINDOW_NORMAL);
+        namedWindow("Result", cv::WINDOW_NORMAL);
+        createTrackbar("High H", "Calibration", &high[0], 255, nullptr);
+        createTrackbar("High S", "Calibration", &high[1], 255, nullptr);
+        createTrackbar("High V", "Calibration", &high[2], 255, nullptr);
+        createTrackbar("Low H", "Calibration", &low[0], 100, nullptr);
+        createTrackbar("Low S", "Calibration", &low[1], 100, nullptr);
+        createTrackbar("Low V", "Calibration", &low[2], 100, nullptr);
 
         Mat local_frame;
-        cv::Mat dilate_element = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(15, 15));
+        Mat dilate_element = getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(15, 15));
         while (true)
         {
             cap >> local_frame;
             cout << '[' << high.val[0] << "," << high.val[1] << "," << high.val[2] << "] [" << low.val[0] << "," << low.val[1] << "," << low.val[2] << "] => Detected : ";
 
             // Process output
-            cv::cvtColor(local_frame, frame, cv::COLOR_BGR2HSV);
-            cv::inRange(frame,
-                        cv::Scalar(low.val[0], low.val[1], low.val[2]),
-                        cv::Scalar(high.val[0], high.val[1], high.val[2]), frame);
-            cv::dilate(frame, frame, dilate_element);
-            cv::GaussianBlur(frame, frame, cv::Size(31, 31), 0, 0);
+            cvtColor(local_frame, frame, cv::COLOR_BGR2HSV);
+            inRange(frame,
+                    cv::Scalar(low.val[0], low.val[1], low.val[2]),
+                    cv::Scalar(high.val[0], high.val[1], high.val[2]), frame);
+            dilate(frame, frame, dilate_element);
+            GaussianBlur(frame, frame, cv::Size(31, 31), 0, 0);
 
             // Get circles
             circles.clear();
-            cv::HoughCircles(frame, circles, cv::HOUGH_GRADIENT, 1, 30, 200, 50, 0, 0);
+            HoughCircles(frame, circles, cv::HOUGH_GRADIENT, 1, 30, 200, 50, 0, 0);
 
             std::cout << circles.size() << "       \r";
             cout.flush();
@@ -344,13 +359,17 @@ namespace EMIRO
             // Show output
             cv::imshow("Calibration", local_frame);
             cv::imshow("Result", frame);
-            if (cv::waitKey(1) == 'q')
+            if (waitKey(1) == 'q')
                 break;
         }
 
         cap.release();
-        cv::destroyAllWindows();
-        sleep(2);
+        destroyAllWindows();
+#ifdef _WIN32
+        Sleep(1000);
+#elif __linux__
+        sleep(1);
+#endif
         cout << "Calibration done                     \n";
     }
 
@@ -381,6 +400,7 @@ namespace EMIRO
                     std::ref(frames_lock), std::ref(thread_en));
         th.detach();
     }
+
     inline void AsyncCam::getobject(vector<Vec3f> &out_circles, Mat &out_frame)
     {
         while (frames_lock.test_and_set(std::memory_order_acquire))
@@ -389,12 +409,13 @@ namespace EMIRO
         out_frame = frame;
         frames_lock.clear();
     }
+
     inline void AsyncCam::stop()
     {
         thread_en = false;
         sleep(1);
         cap.release();
-        cv::destroyAllWindows();
+        destroyAllWindows();
         cout << "Thread stopped. Camera closed\n";
     }
 
@@ -405,7 +426,7 @@ namespace EMIRO
         if (cap.isOpened())
         {
             cap.release();
-            cv::destroyAllWindows();
+            destroyAllWindows();
             cout << "Camera closed\n";
         }
     }

@@ -35,6 +35,23 @@ typedef std::chrono::high_resolution_clock time_clock;
 namespace EMIRO
 {
 
+    struct FrameSet
+    {
+    public:
+        VideoCapture cap;
+        Mat original_frame, frame;
+        int width = 0, height = 0;
+        Scalar_<int> high = Scalar_<int>(255, 255, 255);
+        Scalar_<int> low = Scalar_<int>(0, 0, 0);
+        Scalar_<int> low;
+        Scalar_<int> high;
+        vector<Vec3f> circles;
+        atomic_flag lock_flag;
+        float fps = 0;
+        bool running = true;
+        FrameSet() : lock_flag(ATOMIC_FLAG_INIT) {}
+    };
+
     /**
      * @brief Thread for asynchronusly refreshing frames
      *
@@ -45,44 +62,45 @@ namespace EMIRO
      * @param lock_flag Atomic flag for thread
      * @param running Boolean to control thread
      */
-    static void refresh_frame(VideoCapture &cap, Mat &out_frame, Scalar_<int> &low, Scalar_<int> &high, vector<Vec3f> &out_circles,
-                              atomic_flag &lock_flag, bool &running)
+    static void refresh_frame(FrameSet &frameset)
     {
-        Mat frame;
         int frame_cnt = 0;
         Mat dilate_element = getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(15, 15));
         tpoint start_time = time_clock::now();
         tpoint current_time;
         cout << fixed << setprecision(3);
-        cout << "Color Range: [" << high.val[0] << '-' << low.val[0] << ", " << low.val[1] << '-' << high.val[1] << ", " << low.val[2] << '-' << high.val[2] << "]\n";
-        Scalar local_low = Scalar(low.val[0], low.val[1], low.val[2]);
-        Scalar local_high = Scalar(high.val[0], high.val[1], high.val[2]);
-        while (running)
+
+        Scalar local_low = Scalar(frameset.low.val[0], frameset.low.val[1], frameset.low.val[2]);
+        Scalar local_high = Scalar(frameset.high.val[0], frameset.high.val[1], frameset.high.val[2]);
+        float local_fps = 0.0f;
+
+        while (frameset.running)
         {
-            cap >> frame;
-            cvtColor(frame, frame, cv::COLOR_BGR2HSV);
-            inRange(frame, local_low, local_high, frame);
-            dilate(frame, frame, dilate_element);
-            GaussianBlur(frame, frame, cv::Size(31, 31), 0, 0);
-            while (lock_flag.test_and_set(std::memory_order_acquire))
+            frameset.cap >> frameset.frame;
+            cvtColor(frameset.frame, frameset.frame, cv::COLOR_BGR2HSV);
+            inRange(frameset.frame, local_low, local_high, frameset.frame);
+            dilate(frameset.frame, frameset.frame, dilate_element);
+            GaussianBlur(frameset.frame, frameset.frame, cv::Size(31, 31), 0, 0);
+            while (frameset.lock_flag.test_and_set(std::memory_order_acquire))
                 ;
-            out_circles.clear();
-            cv::HoughCircles(frame, out_circles, cv::HOUGH_GRADIENT, 1, 30, 200, 50, 0, 0);
-            out_frame = frame;
-            lock_flag.clear();
+            frameset.circles.clear();
+            cv::HoughCircles(frameset.frame, frameset.circles, cv::HOUGH_GRADIENT, 1, 30, 200, 50, 0, 0);
+            frameset.original_frame = frameset.frame;
+            frameset.fps = local_fps;
+            frameset.lock_flag.clear();
             frame_cnt++;
             current_time = time_clock::now();
             int64_t elapsed = std::chrono::duration_cast<std::chrono::microseconds>(current_time - start_time).count();
             if (elapsed >= 1000000)
             {
                 start_time = current_time;
-                cout << "FPS: " << static_cast<double>(frame_cnt) / (elapsed / 1000000.0) << "   \r";
-                cout.flush();
+                local_fps = static_cast<float>(frame_cnt) / (elapsed / 1000000.0);
                 frame_cnt = 0;
             }
             waitKey(1);
         }
     }
+
 #pragma region Keyboard
 #ifndef KEYBOARD_INTERRUPT
 #define KEYBOARD_INTERRUPT
@@ -132,48 +150,17 @@ namespace EMIRO
     class AsyncCam
     {
     private:
-        VideoCapture cap;
+        FrameSet frameset;
         Mat frame;
-        Scalar_<int> high = Scalar_<int>(255, 255, 255);
-        Scalar_<int> low = Scalar_<int>(0, 0, 0);
         vector<Vec3f> circles;
         thread th;
-        atomic_flag frames_lock;
         string camera_str;
-        int camera_idx = -1, width = 0, height = 0;
+        int camera_idx = -1;
         bool running = false;
         bool thread_en = true;
 
-    private:
-        void highH_handler(int value, void *userdata)
-        {
-            high.val[0] = value;
-        }
-
-        void lowH_handler(int value, void *userdata)
-        {
-            low.val[0] = value;
-        }
-
-        void highS_handler(int value, void *userdata)
-        {
-            high.val[1] = value;
-        }
-
-        void lowS_handler(int value, void *userdata)
-        {
-            low.val[1] = value;
-        }
-
-        void highV_handler(int value, void *userdata)
-        {
-            high.val[2] = value;
-        }
-
-        void lowV_handler(int value, void *userdata)
-        {
-            low.val[2] = value;
-        }
+    public:
+        int width = 0, height = 0;
 
     public:
         /**
@@ -222,14 +209,16 @@ namespace EMIRO
         ~AsyncCam();
     };
 
-    AsyncCam::AsyncCam(string path, int width, int height) : frames_lock(ATOMIC_FLAG_INIT), width(width), height(height)
+    AsyncCam::AsyncCam(string path, int width, int height)
     {
-        cap = VideoCapture(path);
-        cap.set(cv::CAP_PROP_FRAME_WIDTH, width);
-        cap.set(cv::CAP_PROP_FRAME_HEIGHT, height);
+        frameset.width = width;
+        frameset.height = height;
+        frameset.cap = VideoCapture(path);
+        frameset.cap.set(cv::CAP_PROP_FRAME_WIDTH, width);
+        frameset.cap.set(cv::CAP_PROP_FRAME_HEIGHT, height);
         // set fps
-        cap.set(cv::CAP_PROP_FPS, 30);
-        if (!cap.isOpened())
+        frameset.cap.set(cv::CAP_PROP_FPS, 30);
+        if (!frameset.cap.isOpened())
         {
             cerr << "Failed openning camera\n";
             exit(EXIT_FAILURE);
@@ -239,13 +228,15 @@ namespace EMIRO
         camera_idx = -1;
     }
 
-    AsyncCam::AsyncCam(int device_id, int width, int height) : frames_lock(ATOMIC_FLAG_INIT), width(width), height(height)
+    AsyncCam::AsyncCam(int device_id, int width, int height) : width(width), height(height)
     {
+        frameset.width = width;
+        frameset.height = height;
 #ifdef _WIN32
-        cap = VideoCapture(device_id);
+        frameset.cap = VideoCapture(device_id);
 #elif __linux__
-        cap = VideoCapture(device_id);
-        if (!cap.isOpened())
+        frameset.cap = VideoCapture(device_id);
+        if (!frameset.cap.isOpened())
         {
             char buffer_int[5];
             const char temp1[26] = "v4l2src device=/dev/video";
@@ -263,8 +254,8 @@ namespace EMIRO
             snprintf(buffer_int, sizeof(buffer_int), "%d", height);
             strcat(temp_char, buffer_int);
             strcat(temp_char, temp4);
-            cap = VideoCapture(temp_char);
-            if (!cap.isOpened())
+            frameset.cap = VideoCapture(temp_char);
+            if (!frameset.cap.isOpened())
             {
                 cerr << "Failed openning camera.";
 #ifdef __linux__
@@ -279,10 +270,10 @@ namespace EMIRO
         cout << "Unsupported OS" << endl;);
         exit(EXIT_FAILURE);
 #endif
-        cap.set(cv::CAP_PROP_FRAME_WIDTH, width);
-        cap.set(cv::CAP_PROP_FRAME_HEIGHT, height);
+        frameset.cap.set(cv::CAP_PROP_FRAME_WIDTH, width);
+        frameset.cap.set(cv::CAP_PROP_FRAME_HEIGHT, height);
 
-        if (!cap.isOpened())
+        if (!frameset.cap.isOpened())
         {
             cerr << "Failed openning camera\n";
             exit(EXIT_FAILURE);
@@ -303,12 +294,12 @@ namespace EMIRO
 
         // select camera
         if (camera_idx > -1)
-            cap.open(camera_idx);
+            frameset.cap.open(camera_idx);
         else
-            cap.open(camera_str);
+            frameset.cap.open(camera_str);
 
         // Fail handling
-        if (!cap.isOpened())
+        if (!frameset.cap.isOpened())
         {
             cerr << "Failed openning camera\n";
             exit(EXIT_FAILURE);
@@ -317,25 +308,25 @@ namespace EMIRO
         // Prepare window
         namedWindow("Calibration", cv::WINDOW_NORMAL);
         namedWindow("Result", cv::WINDOW_NORMAL);
-        createTrackbar("High H", "Calibration", &high[0], 255, nullptr);
-        createTrackbar("High S", "Calibration", &high[1], 255, nullptr);
-        createTrackbar("High V", "Calibration", &high[2], 255, nullptr);
-        createTrackbar("Low H", "Calibration", &low[0], 100, nullptr);
-        createTrackbar("Low S", "Calibration", &low[1], 100, nullptr);
-        createTrackbar("Low V", "Calibration", &low[2], 100, nullptr);
+        createTrackbar("High H", "Calibration", &frameset.high[0], 255, nullptr);
+        createTrackbar("High S", "Calibration", &frameset.high[1], 255, nullptr);
+        createTrackbar("High V", "Calibration", &frameset.high[2], 255, nullptr);
+        createTrackbar("Low H", "Calibration", &frameset.low[0], 100, nullptr);
+        createTrackbar("Low S", "Calibration", &frameset.low[1], 100, nullptr);
+        createTrackbar("Low V", "Calibration", &frameset.low[2], 100, nullptr);
 
         Mat local_frame;
         Mat dilate_element = getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(15, 15));
         while (true)
         {
-            cap >> local_frame;
-            cout << '[' << high.val[0] << "," << high.val[1] << "," << high.val[2] << "] [" << low.val[0] << "," << low.val[1] << "," << low.val[2] << "] => Detected : ";
+            frameset.cap >> local_frame;
+            cout << '[' << frameset.high.val[0] << "," << frameset.high.val[1] << "," << frameset.high.val[2] << "] [" << frameset.low.val[0] << "," << frameset.low.val[1] << "," << frameset.low.val[2] << "] => Detected : ";
 
             // Process output
             cvtColor(local_frame, frame, cv::COLOR_BGR2HSV);
             inRange(frame,
-                    cv::Scalar(low.val[0], low.val[1], low.val[2]),
-                    cv::Scalar(high.val[0], high.val[1], high.val[2]), frame);
+                    cv::Scalar(frameset.low.val[0], frameset.low.val[1], frameset.low.val[2]),
+                    cv::Scalar(frameset.high.val[0], frameset.high.val[1], frameset.high.val[2]), frame);
             dilate(frame, frame, dilate_element);
             GaussianBlur(frame, frame, cv::Size(31, 31), 0, 0);
 
@@ -363,7 +354,7 @@ namespace EMIRO
                 break;
         }
 
-        cap.release();
+        frameset.cap.release();
         destroyAllWindows();
 #ifdef _WIN32
         Sleep(1000);
@@ -381,14 +372,14 @@ namespace EMIRO
             return;
         }
         if (camera_idx > -1)
-            cap.open(camera_idx);
+            frameset.cap.open(camera_idx);
         else
-            cap.open(camera_str);
+            frameset.cap.open(camera_str);
         // Set camera resolution
-        cap.set(cv::CAP_PROP_FRAME_WIDTH, width);
-        cap.set(cv::CAP_PROP_FRAME_HEIGHT, height);
+        frameset.cap.set(cv::CAP_PROP_FRAME_WIDTH, width);
+        frameset.cap.set(cv::CAP_PROP_FRAME_HEIGHT, height);
 
-        if (!cap.isOpened())
+        if (!frameset.cap.isOpened())
         {
             cerr << "Failed openning camera\n";
             exit(EXIT_FAILURE);
@@ -396,25 +387,24 @@ namespace EMIRO
         running = true;
 
         cout << "Detection started\n";
-        th = thread(refresh_frame, std::ref(cap), std::ref(frame), std::ref(low), std::ref(high), std::ref(circles),
-                    std::ref(frames_lock), std::ref(thread_en));
+        th = thread(refresh_frame, std::ref(frameset));
         th.detach();
     }
 
     inline void AsyncCam::getobject(vector<Vec3f> &out_circles, Mat &out_frame)
     {
-        while (frames_lock.test_and_set(std::memory_order_acquire))
+        while (frameset.lock_flag.test_and_set(std::memory_order_acquire))
             ;
         out_circles = circles;
         out_frame = frame;
-        frames_lock.clear();
+        frameset.lock_flag.clear();
     }
 
     inline void AsyncCam::stop()
     {
         thread_en = false;
         sleep(1);
-        cap.release();
+        frameset.cap.release();
         destroyAllWindows();
         cout << "Thread stopped. Camera closed\n";
     }
@@ -423,9 +413,9 @@ namespace EMIRO
     {
         while (thread_en)
             stop();
-        if (cap.isOpened())
+        if (frameset.cap.isOpened())
         {
-            cap.release();
+            frameset.cap.release();
             destroyAllWindows();
             cout << "Camera closed\n";
         }

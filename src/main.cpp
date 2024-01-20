@@ -37,17 +37,24 @@ int main()
 
             cv::Point center(cvRound(selected_object[0]), cvRound(selected_object[1]));
             int radius = cvRound(selected_object[2]);
-            // circle center
+
+            // circle center and outline
             cv::circle(frame, center, 3, cv::Scalar(0, 255, 0), -1, 8, 0);
-            // circle outline
             cv::circle(frame, center, radius, cv::Scalar(0, 0, 255), 3, 8, 0);
+
+            // draw center line
         }
+        cv::line(frame, cv::Point(cam.width / 2, 0), cv::Point(cam.width / 2, cam.height), cv::Scalar(255, 255, 0, 255), 2);
+        cv::line(frame, cv::Point(0, cam.height / 2), cv::Point(cam.width, cam.height / 2), cv::Scalar(255, 255, 0, 255), 2);
+
+        cv::imshow("Result", frame);
+        cv::waitKey(1);
         if (kb.get_key() == 27)
         {
             std::cout << "Stopped by interrupt\n";
             break;
         }
-        usleep(100000);
+        // usleep(100000);
     }
     cam.stop();
     return 0;

@@ -35,6 +35,14 @@ typedef std::chrono::high_resolution_clock time_clock;
 namespace EMIRO
 {
 
+    enum class ThreadStatus
+    {
+        NONE,
+        START,
+        RUNNING,
+        STOP
+    };
+
     struct FrameSet
     {
     public:
@@ -46,7 +54,7 @@ namespace EMIRO
         vector<Vec3f> circles;
         atomic_flag lock_flag;
         float fps = 0;
-        bool running = false;
+        ThreadStatus status = ThreadStatus::NONE;
         FrameSet() : lock_flag(ATOMIC_FLAG_INIT) {}
     };
 
@@ -62,6 +70,7 @@ namespace EMIRO
      */
     static void refresh_frame(FrameSet &frameset)
     {
+        frameset.status = ThreadStatus::START;
         int frame_cnt = 0;
         Mat original;
         Mat dilate_element = getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(15, 15));
@@ -73,7 +82,8 @@ namespace EMIRO
         Scalar local_high = Scalar(frameset.high.val[0], frameset.high.val[1], frameset.high.val[2]);
         float local_fps = 0.0f;
 
-        while (frameset.running && frameset.cap.isOpened())
+        frameset.status = ThreadStatus::RUNNING;
+        while (frameset.status == ThreadStatus::RUNNING && frameset.cap.isOpened())
         {
             frameset.cap >> original;
             cvtColor(original, frameset.frame, cv::COLOR_BGR2HSV);
@@ -94,12 +104,13 @@ namespace EMIRO
             {
                 start_time = current_time;
                 local_fps = static_cast<float>(frame_cnt) / (elapsed / 1000000.0);
-                std::cout << "FPS : " << local_fps << " [" << frameset.original_frame.size().width << "x" << frameset.original_frame.size().height << "]   \r";
-                std::cout.flush();
+                // std::cout << "FPS : " << local_fps << " [" << frameset.original_frame.size().width << "x" << frameset.original_frame.size().height << "]   \r";
+                // std::cout.flush();
                 frame_cnt = 0;
             }
             waitKey(1);
         }
+        frameset.status = ThreadStatus::STOP;
     }
 
 #pragma region Keyboard
@@ -229,9 +240,6 @@ namespace EMIRO
     {
         frameset.width = width;
         frameset.height = height;
-#ifdef _WIN32
-        frameset.cap = VideoCapture(device_id);
-#elif __linux__
         frameset.cap = VideoCapture(device_id);
         if (!frameset.cap.isOpened())
         {
@@ -263,10 +271,6 @@ namespace EMIRO
                 exit(EXIT_FAILURE);
             }
         }
-#else
-        cout << "Unsupported OS" << endl;);
-        exit(EXIT_FAILURE);
-#endif
         frameset.cap.set(cv::CAP_PROP_FRAME_WIDTH, width);
         frameset.cap.set(cv::CAP_PROP_FRAME_HEIGHT, height);
 
@@ -282,12 +286,15 @@ namespace EMIRO
 
     inline void AsyncCam::calibrate()
     {
-        // Check if camera is running
-        if (frameset.running)
+        // Check thread status
+        while (frameset.lock_flag.test_and_set(std::memory_order_acquire))
+            ;
+        if (frameset.status == ThreadStatus::RUNNING)
         {
             std::cout << "Camera is already running. Please stop it first\n";
             return;
         }
+        frameset.lock_flag.clear();
 
         // select camera
         if (camera_idx > -1)
@@ -364,15 +371,20 @@ namespace EMIRO
 #elif __linux__
         sleep(2);
 #endif
-        if (frameset.running)
+        while (frameset.lock_flag.test_and_set(std::memory_order_acquire))
+            ;
+        if (frameset.status == ThreadStatus::RUNNING)
         {
             std::cout << "Camera is already running\n";
             return;
         }
+        frameset.lock_flag.clear();
+
         if (camera_idx > -1)
             frameset.cap.open(camera_idx);
         else
             frameset.cap.open(camera_str);
+
         // Set camera resolution
         frameset.cap.set(cv::CAP_PROP_FRAME_WIDTH, width);
         frameset.cap.set(cv::CAP_PROP_FRAME_HEIGHT, height);
@@ -382,7 +394,6 @@ namespace EMIRO
             cerr << "Failed openning camera\n";
             exit(EXIT_FAILURE);
         }
-        frameset.running = true;
 
         cout << "Detection started\n";
         th = thread(refresh_frame, std::ref(frameset));
@@ -400,7 +411,14 @@ namespace EMIRO
 
     inline void AsyncCam::stop()
     {
-        frameset.running = false;
+        while (frameset.lock_flag.test_and_set(std::memory_order_acquire))
+            ;
+        sleep(1);
+
+        // Trigger to close loop
+        frameset.status = ThreadStatus::NONE;
+
+        frameset.lock_flag.clear();
         frameset.cap.release();
         destroyAllWindows();
         cout << "Thread stopped. Camera closed\n";
@@ -408,8 +426,11 @@ namespace EMIRO
 
     AsyncCam::~AsyncCam()
     {
-        while (frameset.running)
+        while (frameset.status == ThreadStatus::RUNNING)
+        {
             stop();
+            sleep(1);
+        }
         if (frameset.cap.isOpened())
         {
             frameset.cap.release();

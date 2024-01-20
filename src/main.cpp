@@ -54,7 +54,7 @@ int main()
             std::cout << "Stopped by interrupt\n";
             break;
         }
-        usleep(10000);
+        usleep(20000);
     }
     cam.stop();
     return 0;

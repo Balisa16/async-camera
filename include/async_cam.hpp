@@ -24,6 +24,21 @@
 #include <fcntl.h>
 #endif
 
+#ifndef TERMINAL_COLOR_STYLE
+#define C_RESET "\033[0m"
+#define C_BLACK "\033[30m"
+#define C_RED "\033[31m"
+#define C_GREEN "\033[32m"
+#define C_YELLOW "\033[33m"
+#define C_BLUE "\033[34m"
+#define C_MAGENTA "\033[35m"
+#define C_CYAN "\033[36m"
+#define C_WHITE "\033[37m"
+#define S_BOLD "\033[1m"
+#define S_ITALIC "\033[3m"
+#define S_UNDERLINE "\033[4m"
+#endif
+
 #pragma region Namespace
 using cv::Point, cv::Mat, cv::VideoCapture, cv::waitKey, cv::Vec3f, cv::Scalar_, cv::Scalar, cv::cvtColor, cv::inRange, cv::dilate, cv::GaussianBlur, cv::getStructuringElement, cv::destroyAllWindows, cv::namedWindow, cv::createTrackbar;
 using std::cout, std::atomic_flag, std::string, std::thread, std::cerr, std::snprintf, std::vector, std::setprecision, std::fixed;
@@ -167,6 +182,8 @@ namespace EMIRO
         string camera_str;
         int camera_idx = -1;
 
+        tpoint last_time = time_clock::now();
+
     public:
         int width = 0, height = 0;
 
@@ -213,6 +230,8 @@ namespace EMIRO
          *
          */
         void stop();
+
+        void sync_fps(float fps = 30);
 
         ~AsyncCam();
     };
@@ -291,7 +310,8 @@ namespace EMIRO
             ;
         if (frameset.status == ThreadStatus::RUNNING)
         {
-            std::cout << "Camera is already running. Please stop it first\n";
+
+            std::cout << C_YELLOW << S_BOLD << "Camera is already running. Please stop it first." << C_RESET << '\n';
             return;
         }
         frameset.lock_flag.clear();
@@ -361,7 +381,6 @@ namespace EMIRO
 
         frameset.cap.release();
         destroyAllWindows();
-        cout << "Calibration done                     \n";
     }
 
     inline void AsyncCam::start()
@@ -375,7 +394,7 @@ namespace EMIRO
             ;
         if (frameset.status == ThreadStatus::RUNNING)
         {
-            std::cout << "Camera is already running\n";
+            std::cout << C_YELLOW << S_BOLD << "Camera is already running." << C_RESET << '\n';
             return;
         }
         frameset.lock_flag.clear();
@@ -395,7 +414,7 @@ namespace EMIRO
             exit(EXIT_FAILURE);
         }
 
-        cout << "Detection started\n";
+        cout << C_GREEN << S_BOLD << "Detection started." << C_RESET << '\n';
         th = thread(refresh_frame, std::ref(frameset));
         th.detach();
     }
@@ -421,22 +440,39 @@ namespace EMIRO
         frameset.lock_flag.clear();
         frameset.cap.release();
         destroyAllWindows();
-        cout << "Thread stopped. Camera closed\n";
+    }
+
+    void AsyncCam::sync_fps(float fps)
+    {
+        if (fps < 1.0f)
+            fps = 15.0f;
+        else if (fps > 60.0f)
+            fps = 30.0f;
+        while (std::chrono::duration_cast<std::chrono::microseconds>(time_clock::now() - last_time).count() < 1000000.0f / fps)
+            ;
+        last_time = time_clock::now();
     }
 
     AsyncCam::~AsyncCam()
     {
+        // Wait for thread to finish
         while (frameset.status == ThreadStatus::RUNNING)
         {
             stop();
             sleep(1);
         }
+
+        // Just give waiting time for thread to finish
+        sleep(2);
+
+        // Make sure camera is closed
         if (frameset.cap.isOpened())
         {
             frameset.cap.release();
             destroyAllWindows();
-            cout << "Camera closed\n";
         }
+
+        std::cout << C_GREEN << S_BOLD << "Detection Finished." << C_RESET << '\n';
     }
 }
 

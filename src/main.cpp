@@ -54,8 +54,8 @@ int main()
             std::cout << "Stopped by interrupt\n";
             break;
         }
-        usleep(20000);
+        cam.sync_fps();
     }
-    cam.stop();
+    // cam.stop();
     return 0;
 }

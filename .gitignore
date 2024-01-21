@@ -1,2 +1,5 @@
 .vscode
 build
+release
+bin
+lib

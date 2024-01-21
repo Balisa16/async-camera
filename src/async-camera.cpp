@@ -41,8 +41,6 @@ int main()
             // circle center and outline
             cv::circle(frame, center, 3, cv::Scalar(0, 255, 0), -1, 8, 0);
             cv::circle(frame, center, radius, cv::Scalar(0, 0, 255), 3, 8, 0);
-
-            // draw center line
         }
         putText(frame, "ESC to exit", Point(20, 20), cv::FONT_HERSHEY_PLAIN, 1, Scalar(255, 0, 0), 2);
         cv::line(frame, cv::Point(cam.width / 2, 0), cv::Point(cam.width / 2, cam.height), cv::Scalar(255, 0, 0), 2);

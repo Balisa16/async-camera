@@ -44,18 +44,16 @@ int main()
 
             // draw center line
         }
-        cv::line(frame, cv::Point(cam.width / 2, 0), cv::Point(cam.width / 2, cam.height), cv::Scalar(255, 255, 0, 255), 2);
-        cv::line(frame, cv::Point(0, cam.height / 2), cv::Point(cam.width, cam.height / 2), cv::Scalar(255, 255, 0, 255), 2);
+        putText(frame, "ESC to exit", Point(20, 20), cv::FONT_HERSHEY_PLAIN, 1, Scalar(255, 0, 0), 2);
+        cv::line(frame, cv::Point(cam.width / 2, 0), cv::Point(cam.width / 2, cam.height), cv::Scalar(255, 0, 0), 2);
+        cv::line(frame, cv::Point(0, cam.height / 2), cv::Point(cam.width, cam.height / 2), cv::Scalar(255, 0, 0), 2);
         if (frame.size().width > 0)
             cv::imshow("Result", frame);
         cv::waitKey(1);
         if (kb.get_key() == 27)
-        {
-            std::cout << "Stopped by interrupt\n";
             break;
-        }
         cam.sync_fps();
     }
-    // cam.stop();
+    cam.stop();
     return 0;
 }

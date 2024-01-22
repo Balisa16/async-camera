@@ -338,8 +338,9 @@ namespace EMIRO
         frameset.cap.set(cv::CAP_PROP_FRAME_HEIGHT, height);
 
         // Prepare window
-        namedWindow("Calibration", cv::WINDOW_NORMAL);
+        namedWindow("Calibration", cv::WINDOW_AUTOSIZE);
         namedWindow("Result", cv::WINDOW_NORMAL);
+        cv::resizeWindow("Result", width, height);
         createTrackbar("High H", "Calibration", &frameset.high[0], 255, nullptr);
         createTrackbar("High S", "Calibration", &frameset.high[1], 255, nullptr);
         createTrackbar("High V", "Calibration", &frameset.high[2], 255, nullptr);
@@ -353,7 +354,6 @@ namespace EMIRO
         while (true)
         {
             frameset.cap >> local_frame;
-            cout << '[' << frameset.high.val[0] << "," << frameset.high.val[1] << "," << frameset.high.val[2] << "] [" << frameset.low.val[0] << "," << frameset.low.val[1] << "," << frameset.low.val[2] << "] => Detected : ";
 
             // Process output
             cvtColor(local_frame, frame, cv::COLOR_BGR2HSV);
@@ -367,7 +367,6 @@ namespace EMIRO
             circles.clear();
             HoughCircles(frame, circles, cv::HOUGH_GRADIENT, 1, 30, 200, 50, 0, 0);
 
-            std::cout << circles.size() << "       \r";
             cout.flush();
 
             for (auto &c : circles)
@@ -379,6 +378,11 @@ namespace EMIRO
                 // circle outline
                 cv::circle(local_frame, center, radius, cv::Scalar(0, 0, 255), 3, 8, 0);
             }
+
+            if (!circles.empty())
+                cout << C_GREEN << S_BOLD << "[OK] => " << circles.size() << " circles." << C_RESET << "   \r";
+            else
+                cout << C_RED << S_BOLD << "[NONE]" << C_RESET << "                \r";
 
             // Show output
             cv::imshow("Calibration", local_frame);

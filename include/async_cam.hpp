@@ -184,6 +184,10 @@ namespace EMIRO
 
         tpoint last_time = time_clock::now();
 
+        static void point_buffer(Point &point, const int &buffer_size);
+        static void rotate_point(Point &p, const double &angle);
+        static void adjust_point(Point &p, const int &px_radius);
+
     public:
         int width = 0, height = 0;
 
@@ -240,6 +244,54 @@ namespace EMIRO
 
         ~AsyncCam();
     };
+
+    void AsyncCam::point_buffer(Point &point, const int &buffer_size)
+    {
+        static vector<Point> buffer;
+        buffer.push_back(point);
+
+        if (buffer.size() > buffer_size)
+            buffer.erase(buffer.begin());
+
+        const float nat = 5.0f / (float)buffer.size();
+
+        float Sn = 0.0f, _, _sig = 0.0f;
+        point = {0, 0};
+        for (int i = 0; i < buffer.size(); i++)
+        {
+            // Calculate sigmoid expression: k / (1 + e^(a + bx))
+            _sig = 0.8f / (1 + std::exp(10 - 3 * nat * i)) + 0.2f;
+            point.x += (buffer[i].x * _sig);
+            point.y += (buffer[i].y * _sig);
+            Sn += _sig;
+        }
+        point.x /= Sn;
+        point.y /= Sn;
+    }
+
+    void AsyncCam::rotate_point(Point &p, const double &angle)
+    {
+        double cos_theta = std::cos(angle);
+        double sin_theta = std::sin(angle);
+
+        // Rotation matrix
+        double newX = p.x * cos_theta - p.y * sin_theta;
+        double newY = p.x * sin_theta + p.y * cos_theta;
+
+        p.x = newX;
+        p.y = newY;
+    }
+
+    void AsyncCam::adjust_point(Point &p, const int &px_radius)
+    {
+        float dist = std::sqrt(p.x * p.x + p.y * p.y);
+        if (dist <= px_radius)
+            return;
+
+        float ratio = px_radius / dist;
+        p.x *= ratio;
+        p.y *= ratio;
+    }
 
     AsyncCam::AsyncCam(string path, int width, int height)
     {

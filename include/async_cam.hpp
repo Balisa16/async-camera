@@ -184,14 +184,34 @@ namespace EMIRO
 
         tpoint last_time = time_clock::now();
 
-        static void point_buffer(Point &point, const int &buffer_size);
-        static void rotate_point(Point &p, const double &angle);
-        static void adjust_point(Point &p, const int &px_radius);
-
     public:
         int width = 0, height = 0;
 
     public:
+        /**
+         * @brief Make control object movement is smooth
+         *
+         * @param point current point
+         * @param buffer_size Size of buffer. Higher is more smooth but lag
+         */
+        static void point_buffer(Point &point, const int &buffer_size);
+
+        /**
+         * @brief Rotate a point
+         *
+         * @param p A point which want to rotate.
+         * @param angle angle of rotation
+         */
+        static void rotate_point(Point &p, const double &angle);
+
+        /**
+         * @brief Check if current point is out of center range.
+         * When it is out of range, this will calcuate new point which have same direction
+         *
+         * @param p Current point and output calculation of new point if it is out of range
+         * @param px_radius Range of radius point tolerance from center of image which px_radius < image_height/2 (if image is landscape).
+         */
+        static void adjust_point(Point &p, const int &px_radius);
         /**
          * @brief Construct a new Async Camera using string device path
          *

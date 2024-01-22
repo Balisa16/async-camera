@@ -231,6 +231,11 @@ namespace EMIRO
          */
         void stop();
 
+        /**
+         * @brief Syncronize target fps
+         * @note This must called in frame loop
+         * @param fps Target FPS (float) where 1.0f <= fps <= 60.0f
+         */
         void sync_fps(float fps = 30);
 
         ~AsyncCam();
@@ -328,6 +333,9 @@ namespace EMIRO
             cerr << "Failed openning camera\n";
             exit(EXIT_FAILURE);
         }
+
+        frameset.cap.set(cv::CAP_PROP_FRAME_WIDTH, width);
+        frameset.cap.set(cv::CAP_PROP_FRAME_HEIGHT, height);
 
         // Prepare window
         namedWindow("Calibration", cv::WINDOW_NORMAL);

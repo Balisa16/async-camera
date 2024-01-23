@@ -220,7 +220,7 @@ namespace EMIRO
         frameset.status = ThreadStatus::START;
         int frame_cnt = 0;
         Mat original;
-        Mat dilate_element = getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(15, 15));
+        Mat dilate_element = getStructuringElement(MORPH_ELLIPSE, Size(15, 15));
         tpoint start_time = time_clock::now();
         tpoint current_time;
         cout << fixed << setprecision(3);
@@ -233,14 +233,14 @@ namespace EMIRO
         while (frameset.status == ThreadStatus::RUNNING && frameset.cap.isOpened())
         {
             frameset.cap >> original;
-            cvtColor(original, frameset.frame, cv::COLOR_BGR2HSV);
+            cvtColor(original, frameset.frame, COLOR_BGR2HSV);
             inRange(frameset.frame, local_low, local_high, frameset.frame);
             dilate(frameset.frame, frameset.frame, dilate_element);
-            GaussianBlur(frameset.frame, frameset.frame, cv::Size(31, 31), 0, 0);
+            GaussianBlur(frameset.frame, frameset.frame, Size(31, 31), 0, 0);
             while (frameset.lock_flag.test_and_set(std::memory_order_acquire))
                 ;
             frameset.circles.clear();
-            cv::HoughCircles(frameset.frame, frameset.circles, cv::HOUGH_GRADIENT, 1, 30, 200, 50, 0, 0);
+            HoughCircles(frameset.frame, frameset.circles, HOUGH_GRADIENT, 1, 30, 200, 50, 0, 0);
             original.copyTo(frameset.original_frame);
             frameset.fps = local_fps;
             frameset.lock_flag.clear();
@@ -313,10 +313,10 @@ namespace EMIRO
         frameset.width = width;
         frameset.height = height;
         frameset.cap = VideoCapture(path);
-        frameset.cap.set(cv::CAP_PROP_FRAME_WIDTH, width);
-        frameset.cap.set(cv::CAP_PROP_FRAME_HEIGHT, height);
+        frameset.cap.set(CAP_PROP_FRAME_WIDTH, width);
+        frameset.cap.set(CAP_PROP_FRAME_HEIGHT, height);
         // set fps
-        frameset.cap.set(cv::CAP_PROP_FPS, 30);
+        frameset.cap.set(CAP_PROP_FPS, 30);
         if (!frameset.cap.isOpened())
         {
             cerr << "Failed openning camera\n";
@@ -362,8 +362,8 @@ namespace EMIRO
                 exit(EXIT_FAILURE);
             }
         }
-        frameset.cap.set(cv::CAP_PROP_FRAME_WIDTH, width);
-        frameset.cap.set(cv::CAP_PROP_FRAME_HEIGHT, height);
+        frameset.cap.set(CAP_PROP_FRAME_WIDTH, width);
+        frameset.cap.set(CAP_PROP_FRAME_HEIGHT, height);
 
         if (!frameset.cap.isOpened())
         {
@@ -401,13 +401,13 @@ namespace EMIRO
             exit(EXIT_FAILURE);
         }
 
-        frameset.cap.set(cv::CAP_PROP_FRAME_WIDTH, width);
-        frameset.cap.set(cv::CAP_PROP_FRAME_HEIGHT, height);
+        frameset.cap.set(CAP_PROP_FRAME_WIDTH, width);
+        frameset.cap.set(CAP_PROP_FRAME_HEIGHT, height);
 
         // Prepare window
-        namedWindow("Calibration", cv::WINDOW_AUTOSIZE);
-        namedWindow("Result", cv::WINDOW_NORMAL);
-        cv::resizeWindow("Result", width, height);
+        namedWindow("Calibration", WINDOW_AUTOSIZE);
+        namedWindow("Result", WINDOW_NORMAL);
+        resizeWindow("Result", width, height);
         createTrackbar("High H", "Calibration", &frameset.high[0], 255, nullptr);
         createTrackbar("High S", "Calibration", &frameset.high[1], 255, nullptr);
         createTrackbar("High V", "Calibration", &frameset.high[2], 255, nullptr);
@@ -417,33 +417,33 @@ namespace EMIRO
 
         Mat local_frame, frame;
         vector<Vec3f> circles;
-        Mat dilate_element = getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(15, 15));
+        Mat dilate_element = getStructuringElement(MORPH_ELLIPSE, Size(15, 15));
         while (true)
         {
             frameset.cap >> local_frame;
 
             // Process output
-            cvtColor(local_frame, frame, cv::COLOR_BGR2HSV);
+            cvtColor(local_frame, frame, COLOR_BGR2HSV);
             inRange(frame,
-                    cv::Scalar(frameset.low.val[0], frameset.low.val[1], frameset.low.val[2]),
-                    cv::Scalar(frameset.high.val[0], frameset.high.val[1], frameset.high.val[2]), frame);
+                    Scalar(frameset.low.val[0], frameset.low.val[1], frameset.low.val[2]),
+                    Scalar(frameset.high.val[0], frameset.high.val[1], frameset.high.val[2]), frame);
             dilate(frame, frame, dilate_element);
-            GaussianBlur(frame, frame, cv::Size(31, 31), 0, 0);
+            GaussianBlur(frame, frame, Size(31, 31), 0, 0);
 
             // Get circles
             circles.clear();
-            HoughCircles(frame, circles, cv::HOUGH_GRADIENT, 1, 30, 200, 50, 0, 0);
+            HoughCircles(frame, circles, HOUGH_GRADIENT, 1, 30, 200, 50, 0, 0);
 
             cout.flush();
 
             for (auto &c : circles)
             {
-                cv::Point center(cvRound(c[0]), cvRound(c[1]));
+                Point center(cvRound(c[0]), cvRound(c[1]));
                 int radius = cvRound(c[2]);
                 // circle center
-                cv::circle(local_frame, center, 3, cv::Scalar(0, 255, 0), -1, 8, 0);
+                circle(local_frame, center, 3, Scalar(0, 255, 0), -1, 8, 0);
                 // circle outline
-                cv::circle(local_frame, center, radius, cv::Scalar(0, 0, 255), 3, 8, 0);
+                circle(local_frame, center, radius, Scalar(0, 0, 255), 3, 8, 0);
             }
 
             if (!circles.empty())
@@ -452,8 +452,8 @@ namespace EMIRO
                 cout << C_RED << S_BOLD << "[NONE]" << C_RESET << "                \r";
 
             // Show output
-            cv::imshow("Calibration", local_frame);
-            cv::imshow("Result", frame);
+            imshow("Calibration", local_frame);
+            imshow("Result", frame);
             if (waitKey(1) == 'q')
                 break;
         }
@@ -484,8 +484,8 @@ namespace EMIRO
             frameset.cap.open(camera_str);
 
         // Set camera resolution
-        frameset.cap.set(cv::CAP_PROP_FRAME_WIDTH, width);
-        frameset.cap.set(cv::CAP_PROP_FRAME_HEIGHT, height);
+        frameset.cap.set(CAP_PROP_FRAME_WIDTH, width);
+        frameset.cap.set(CAP_PROP_FRAME_HEIGHT, height);
 
         if (!frameset.cap.isOpened())
         {

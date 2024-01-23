@@ -49,85 +49,6 @@ typedef std::chrono::high_resolution_clock time_clock;
 
 namespace EMIRO
 {
-
-    enum class ThreadStatus
-    {
-        NONE,
-        START,
-        RUNNING,
-        STOP
-    };
-
-    struct FrameSet
-    {
-    public:
-        VideoCapture cap;
-        Mat original_frame, frame;
-        int width = 0, height = 0;
-        Scalar_<int> high = Scalar_<int>(255, 255, 255);
-        Scalar_<int> low = Scalar_<int>(0, 0, 0);
-        vector<Vec3f> circles;
-        atomic_flag lock_flag;
-        float fps = 0;
-        ThreadStatus status = ThreadStatus::NONE;
-        FrameSet() : lock_flag(ATOMIC_FLAG_INIT) {}
-    };
-
-    /**
-     * @brief Thread for asynchronusly refreshing frames
-     *
-     * @param cap Video Capture
-     * @param low Scalar for low range
-     * @param high Scalar for high range
-     * @param out_circles Vector for detected circles
-     * @param lock_flag Atomic flag for thread
-     * @param running Boolean to control thread
-     */
-    static void refresh_frame(FrameSet &frameset)
-    {
-        frameset.status = ThreadStatus::START;
-        int frame_cnt = 0;
-        Mat original;
-        Mat dilate_element = getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(15, 15));
-        tpoint start_time = time_clock::now();
-        tpoint current_time;
-        cout << fixed << setprecision(3);
-
-        Scalar local_low = Scalar(frameset.low.val[0], frameset.low.val[1], frameset.low.val[2]);
-        Scalar local_high = Scalar(frameset.high.val[0], frameset.high.val[1], frameset.high.val[2]);
-        float local_fps = 0.0f;
-
-        frameset.status = ThreadStatus::RUNNING;
-        while (frameset.status == ThreadStatus::RUNNING && frameset.cap.isOpened())
-        {
-            frameset.cap >> original;
-            cvtColor(original, frameset.frame, cv::COLOR_BGR2HSV);
-            inRange(frameset.frame, local_low, local_high, frameset.frame);
-            dilate(frameset.frame, frameset.frame, dilate_element);
-            GaussianBlur(frameset.frame, frameset.frame, cv::Size(31, 31), 0, 0);
-            while (frameset.lock_flag.test_and_set(std::memory_order_acquire))
-                ;
-            frameset.circles.clear();
-            cv::HoughCircles(frameset.frame, frameset.circles, cv::HOUGH_GRADIENT, 1, 30, 200, 50, 0, 0);
-            original.copyTo(frameset.original_frame);
-            frameset.fps = local_fps;
-            frameset.lock_flag.clear();
-            frame_cnt++;
-            current_time = time_clock::now();
-            int64_t elapsed = std::chrono::duration_cast<std::chrono::microseconds>(current_time - start_time).count();
-            if (elapsed >= 1000000)
-            {
-                start_time = current_time;
-                local_fps = static_cast<float>(frame_cnt) / (elapsed / 1000000.0);
-                // std::cout << "FPS : " << local_fps << " [" << frameset.original_frame.size().width << "x" << frameset.original_frame.size().height << "]   \r";
-                // std::cout.flush();
-                frame_cnt = 0;
-            }
-            waitKey(1);
-        }
-        frameset.status = ThreadStatus::STOP;
-    }
-
 #pragma region Keyboard
 #ifndef KEYBOARD_INTERRUPT
 #define KEYBOARD_INTERRUPT
@@ -176,13 +97,44 @@ namespace EMIRO
 
     class AsyncCam
     {
+    public:
+        enum class ThreadStatus
+        {
+            NONE,
+            START,
+            RUNNING,
+            STOP
+        };
+        struct FrameSet
+        {
+        public:
+            VideoCapture cap;
+            Mat original_frame, frame;
+            int width = 0, height = 0;
+            Scalar_<int> high = Scalar_<int>(255, 255, 255);
+            Scalar_<int> low = Scalar_<int>(0, 0, 0);
+            vector<Vec3f> circles;
+            atomic_flag lock_flag;
+            float fps = 0;
+            ThreadStatus status = ThreadStatus::NONE;
+            FrameSet() : lock_flag(ATOMIC_FLAG_INIT) {}
+        };
+
     private:
         FrameSet frameset;
         thread th;
         string camera_str;
         int camera_idx = -1;
-
         tpoint last_time = time_clock::now();
+
+    private:
+        /**
+         * @brief Refresh frame asynchronously
+         *
+         * @param frameset Frame set
+         * @see AsyncCam::FrameSet
+         */
+        static void refresh_frame(FrameSet &frameset);
 
     public:
         int width = 0, height = 0;
@@ -264,6 +216,51 @@ namespace EMIRO
 
         ~AsyncCam();
     };
+
+    void AsyncCam::refresh_frame(FrameSet &frameset)
+    {
+        frameset.status = ThreadStatus::START;
+        int frame_cnt = 0;
+        Mat original;
+        Mat dilate_element = getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(15, 15));
+        tpoint start_time = time_clock::now();
+        tpoint current_time;
+        cout << fixed << setprecision(3);
+
+        Scalar local_low = Scalar(frameset.low.val[0], frameset.low.val[1], frameset.low.val[2]);
+        Scalar local_high = Scalar(frameset.high.val[0], frameset.high.val[1], frameset.high.val[2]);
+        float local_fps = 0.0f;
+
+        frameset.status = ThreadStatus::RUNNING;
+        while (frameset.status == ThreadStatus::RUNNING && frameset.cap.isOpened())
+        {
+            frameset.cap >> original;
+            cvtColor(original, frameset.frame, cv::COLOR_BGR2HSV);
+            inRange(frameset.frame, local_low, local_high, frameset.frame);
+            dilate(frameset.frame, frameset.frame, dilate_element);
+            GaussianBlur(frameset.frame, frameset.frame, cv::Size(31, 31), 0, 0);
+            while (frameset.lock_flag.test_and_set(std::memory_order_acquire))
+                ;
+            frameset.circles.clear();
+            cv::HoughCircles(frameset.frame, frameset.circles, cv::HOUGH_GRADIENT, 1, 30, 200, 50, 0, 0);
+            original.copyTo(frameset.original_frame);
+            frameset.fps = local_fps;
+            frameset.lock_flag.clear();
+            frame_cnt++;
+            current_time = time_clock::now();
+            int64_t elapsed = std::chrono::duration_cast<std::chrono::microseconds>(current_time - start_time).count();
+            if (elapsed >= 1000000)
+            {
+                start_time = current_time;
+                local_fps = static_cast<float>(frame_cnt) / (elapsed / 1000000.0);
+                // std::cout << "FPS : " << local_fps << " [" << frameset.original_frame.size().width << "x" << frameset.original_frame.size().height << "]   \r";
+                // std::cout.flush();
+                frame_cnt = 0;
+            }
+            waitKey(1);
+        }
+        frameset.status = ThreadStatus::STOP;
+    }
 
     void AsyncCam::point_buffer(Point &point, const int &buffer_size)
     {

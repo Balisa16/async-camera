@@ -39,10 +39,8 @@
 #define S_UNDERLINE "\033[4m"
 #endif
 
-#pragma region Namespace
-using cv::Point, cv::Mat, cv::VideoCapture, cv::waitKey, cv::Vec3f, cv::Scalar_, cv::Scalar, cv::cvtColor, cv::inRange, cv::dilate, cv::GaussianBlur, cv::getStructuringElement, cv::destroyAllWindows, cv::namedWindow, cv::createTrackbar;
-using std::cout, std::atomic_flag, std::string, std::thread, std::cerr, std::snprintf, std::vector, std::setprecision, std::fixed;
-#pragma endregion
+using namespace cv;
+using namespace std;
 
 typedef std::chrono::_V2::system_clock::time_point tpoint;
 typedef std::chrono::high_resolution_clock time_clock;

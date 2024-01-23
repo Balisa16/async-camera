@@ -181,6 +181,14 @@ namespace EMIRO
         AsyncCam(int device_id = 0, int width = 640, int height = 480);
 
         /**
+         * @brief Set the color range for object detection
+         *
+         * @param high High Limit of color (in HSV format)
+         * @param low Low Limit of color (in HSV format)
+         */
+        void set_range(const Scalar_<int> &high, const Scalar_<int> &low);
+
+        /**
          * @brief Do calibration of low and high threshold values
          *
          */
@@ -282,6 +290,17 @@ namespace EMIRO
         }
         point.x /= Sn;
         point.y /= Sn;
+    }
+
+    void AsyncCam::set_range(const Scalar_<int> &high, const Scalar_<int> &low)
+    {
+        if (frameset.status == ThreadStatus::RUNNING)
+        {
+            cout << S_BOLD << C_YELLOW << "Camera is already running. " << C_RESET << "Please stop it first.\n";
+            return;
+        }
+        frameset.high = high;
+        frameset.low = low;
     }
 
     void AsyncCam::rotate_point(Point &p, const double &angle)

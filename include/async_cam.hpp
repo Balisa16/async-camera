@@ -270,7 +270,7 @@ namespace EMIRO
 
         const float nat = 5.0f / (float)buffer.size();
 
-        float Sn = 0.0f, _, _sig = 0.0f;
+        float Sn = 0.0f, _sig = 0.0f;
         point = {0, 0};
         for (int i = 0; i < buffer.size(); i++)
         {

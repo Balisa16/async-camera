@@ -42,8 +42,8 @@
 using namespace cv;
 using namespace std;
 
-typedef std::chrono::_V2::system_clock::time_point tpoint;
-typedef std::chrono::high_resolution_clock time_clock;
+typedef chrono::_V2::system_clock::time_point tpoint;
+typedef chrono::high_resolution_clock time_clock;
 
 namespace EMIRO
 {
@@ -237,7 +237,7 @@ namespace EMIRO
             inRange(frameset.frame, local_low, local_high, frameset.frame);
             dilate(frameset.frame, frameset.frame, dilate_element);
             GaussianBlur(frameset.frame, frameset.frame, Size(31, 31), 0, 0);
-            while (frameset.lock_flag.test_and_set(std::memory_order_acquire))
+            while (frameset.lock_flag.test_and_set(memory_order_acquire))
                 ;
             frameset.circles.clear();
             HoughCircles(frameset.frame, frameset.circles, HOUGH_GRADIENT, 1, 30, 200, 50, 0, 0);
@@ -246,13 +246,13 @@ namespace EMIRO
             frameset.lock_flag.clear();
             frame_cnt++;
             current_time = time_clock::now();
-            int64_t elapsed = std::chrono::duration_cast<std::chrono::microseconds>(current_time - start_time).count();
+            int64_t elapsed = chrono::duration_cast<chrono::microseconds>(current_time - start_time).count();
             if (elapsed >= 1000000)
             {
                 start_time = current_time;
                 local_fps = static_cast<float>(frame_cnt) / (elapsed / 1000000.0);
-                // std::cout << "FPS : " << local_fps << " [" << frameset.original_frame.size().width << "x" << frameset.original_frame.size().height << "]   \r";
-                // std::cout.flush();
+                // cout << "FPS : " << local_fps << " [" << frameset.original_frame.size().width << "x" << frameset.original_frame.size().height << "]   \r";
+                // cout.flush();
                 frame_cnt = 0;
             }
             waitKey(1);
@@ -275,7 +275,7 @@ namespace EMIRO
         for (int i = 0; i < buffer.size(); i++)
         {
             // Calculate sigmoid expression: k / (1 + e^(a + bx))
-            _sig = 0.8f / (1 + std::exp(10 - 3 * nat * i)) + 0.2f;
+            _sig = 0.8f / (1 + exp(10 - 3 * nat * i)) + 0.2f;
             point.x += (buffer[i].x * _sig);
             point.y += (buffer[i].y * _sig);
             Sn += _sig;
@@ -286,8 +286,8 @@ namespace EMIRO
 
     void AsyncCam::rotate_point(Point &p, const double &angle)
     {
-        double cos_theta = std::cos(angle);
-        double sin_theta = std::sin(angle);
+        double cos_theta = cos(angle);
+        double sin_theta = sin(angle);
 
         // Rotation matrix
         double newX = p.x * cos_theta - p.y * sin_theta;
@@ -299,7 +299,7 @@ namespace EMIRO
 
     void AsyncCam::adjust_point(Point &p, const int &px_radius)
     {
-        float dist = std::sqrt(p.x * p.x + p.y * p.y);
+        float dist = sqrt(p.x * p.x + p.y * p.y);
         if (dist <= px_radius)
             return;
 
@@ -378,12 +378,12 @@ namespace EMIRO
     inline void AsyncCam::calibrate()
     {
         // Check thread status
-        while (frameset.lock_flag.test_and_set(std::memory_order_acquire))
+        while (frameset.lock_flag.test_and_set(memory_order_acquire))
             ;
         if (frameset.status == ThreadStatus::RUNNING)
         {
 
-            std::cout << C_YELLOW << S_BOLD << "Camera is already running. Please stop it first." << C_RESET << '\n';
+            cout << C_YELLOW << S_BOLD << "Camera is already running. Please stop it first." << C_RESET << '\n';
             return;
         }
         frameset.lock_flag.clear();
@@ -469,11 +469,11 @@ namespace EMIRO
 #elif __linux__
         sleep(2);
 #endif
-        while (frameset.lock_flag.test_and_set(std::memory_order_acquire))
+        while (frameset.lock_flag.test_and_set(memory_order_acquire))
             ;
         if (frameset.status == ThreadStatus::RUNNING)
         {
-            std::cout << C_YELLOW << S_BOLD << "Camera is already running." << C_RESET << '\n';
+            cout << C_YELLOW << S_BOLD << "Camera is already running." << C_RESET << '\n';
             return;
         }
         frameset.lock_flag.clear();
@@ -494,13 +494,13 @@ namespace EMIRO
         }
 
         cout << C_GREEN << S_BOLD << "Detection started." << C_RESET << '\n';
-        th = thread(refresh_frame, std::ref(frameset));
+        th = thread(refresh_frame, ref(frameset));
         th.detach();
     }
 
     inline void AsyncCam::getobject(vector<Vec3f> &out_circles, Mat &out_frame)
     {
-        while (frameset.lock_flag.test_and_set(std::memory_order_acquire))
+        while (frameset.lock_flag.test_and_set(memory_order_acquire))
             ;
         out_circles = frameset.circles;
         out_frame = frameset.original_frame;
@@ -509,7 +509,7 @@ namespace EMIRO
 
     inline void AsyncCam::stop()
     {
-        while (frameset.lock_flag.test_and_set(std::memory_order_acquire))
+        while (frameset.lock_flag.test_and_set(memory_order_acquire))
             ;
         sleep(1);
 
@@ -527,7 +527,7 @@ namespace EMIRO
             fps = 15.0f;
         else if (fps > 60.0f)
             fps = 30.0f;
-        while (std::chrono::duration_cast<std::chrono::microseconds>(time_clock::now() - last_time).count() < 1000000.0f / fps)
+        while (chrono::duration_cast<chrono::microseconds>(time_clock::now() - last_time).count() < 1000000.0f / fps)
             ;
         last_time = time_clock::now();
     }
@@ -551,7 +551,7 @@ namespace EMIRO
             destroyAllWindows();
         }
 
-        std::cout << C_GREEN << S_BOLD << "Detection Finished." << C_RESET << '\n';
+        cout << C_GREEN << S_BOLD << "Detection Finished." << C_RESET << '\n';
     }
 }
 

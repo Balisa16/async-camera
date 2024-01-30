@@ -17,11 +17,14 @@ include_directories(
 
 # If you want to build shared library
 add_library(${PROJECT_NAME} SHARED
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/async-camera.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/async-camera.cc
 )
-
-# add_executable(${PROJECT_NAME} src/async-camera.cpp)
 target_compile_options(${PROJECT_NAME} PRIVATE 
     -std=gnu++17 
     -Wunused-variable)
-target_link_libraries(${PROJECT_NAME} ${OpenCV_LIBS} Threads::Threads)
+
+add_executable(test src/test.cpp)
+target_compile_options(test PRIVATE 
+    -std=gnu++17 
+    -Wunused-variable)
+target_link_libraries(test ${OpenCV_LIBS} Threads::Threads asynccamera)

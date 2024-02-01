@@ -22,6 +22,7 @@ add_library(${PROJECT_NAME} SHARED
 target_compile_options(${PROJECT_NAME} PRIVATE 
     -std=gnu++17 
     -Wunused-variable)
+target_link_libraries(${PROJECT_NAME} ${OpenCV_LIBS} Threads::Threads)
 
 add_executable(asynccam_test src/test.cpp)
 target_compile_options(asynccam_test PRIVATE 

@@ -23,8 +23,8 @@ target_compile_options(${PROJECT_NAME} PRIVATE
     -std=gnu++17 
     -Wunused-variable)
 
-add_executable(test src/test.cpp)
-target_compile_options(test PRIVATE 
+add_executable(asynccam_test src/test.cpp)
+target_compile_options(asynccam_test PRIVATE 
     -std=gnu++17 
     -Wunused-variable)
-target_link_libraries(test ${OpenCV_LIBS} Threads::Threads asynccamera)
+target_link_libraries(asynccam_test ${OpenCV_LIBS} Threads::Threads asynccamera)
